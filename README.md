@@ -10,7 +10,7 @@ ATS resume scoring for PDF and DOCX uploads. Extract text the way an applicant t
 cp .env.example .env.local
 ```
 
-2. Set a real `OPENAI_API_KEY` in `.env.local`.
+2. Set `GOOGLE_GENERATIVE_AI_API_KEY` in `.env.local` (get one from [Google AI Studio](https://aistudio.google.com/apikey)).
 
 3. Install and run:
 
@@ -27,7 +27,7 @@ Open [http://localhost:3000](http://localhost:3000).
 - TypeScript (strict)
 - Tailwind CSS
 - Zod
-- Vercel AI SDK (`ai`, `@ai-sdk/openai`)
+- Vercel AI SDK (`ai`, `@ai-sdk/google`)
 
 ## Scripts
 

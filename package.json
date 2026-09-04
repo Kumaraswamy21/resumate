@@ -10,7 +10,7 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^4.0.58",
+    "@ai-sdk/google": "^4.0.63",
     "ai": "^7.0.92",
     "mammoth": "^1.12.2",
     "next": "14.2.35",
