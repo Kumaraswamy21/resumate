@@ -13,7 +13,16 @@ function wordCount(text: string): number {
 
 export async function POST(request: Request) {
   try {
-    const formData = await request.formData();
+    let formData: FormData;
+    try {
+      formData = await request.formData();
+    } catch {
+      return NextResponse.json(
+        { success: false, error: "A resume file is required." },
+        { status: 400 },
+      );
+    }
+
     const file = formData.get("file");
 
     if (!file || !(file instanceof File)) {
