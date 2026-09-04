@@ -4,6 +4,13 @@ import { parsePartialJson } from "ai";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { CriteriaTable } from "@/components/CriteriaTable";
+import { ErrorBanner } from "@/components/ErrorBanner";
+import { ScoreGauge } from "@/components/ScoreGauge";
+import { StrengthsList } from "@/components/StrengthsList";
+import { SuggestionsList } from "@/components/SuggestionsList";
+import { WeaknessesList } from "@/components/WeaknessesList";
+import { ATSResultSchema, type ATSResult } from "@/lib/ai/prompt";
 
 type StoredAtsResult = {
   extractedText: string;
@@ -27,23 +34,27 @@ function readExtractedText(): string | null {
   }
 }
 
-function scoreTone(score: number): {
-  label: string;
-  className: string;
-} {
-  if (score >= 80) {
-    return { label: "Strong ATS fit", className: "text-success" };
+function contextualSentence(score: number): string {
+  if (score >= 75) {
+    return "Your resume is well optimized for ATS screening. A few refinements could push it even higher.";
   }
-  if (score >= 60) {
-    return { label: "Moderate ATS fit", className: "text-action" };
+  if (score >= 50) {
+    return "Your resume is partially ATS-ready, but key gaps remain. Address the suggestions below to improve your odds.";
   }
-  return { label: "Needs improvement", className: "text-danger" };
+  return "Your resume needs significant improvements before it will pass most ATS filters. Start with the high-priority suggestions.";
+}
+
+function isPartialObject(
+  value: unknown,
+): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export default function ResultPage() {
   const router = useRouter();
   const [extractedText, setExtractedText] = useState<string | null>(null);
   const [atsScore, setAtsScore] = useState<number | null>(null);
+  const [result, setResult] = useState<ATSResult | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
@@ -66,10 +77,11 @@ export default function ResultPage() {
 
     let cancelled = false;
 
-    async function streamScore() {
+    async function streamAnalysis() {
       setIsStreaming(true);
       setError(null);
       setAtsScore(null);
+      setResult(null);
 
       try {
         const formData = new FormData();
@@ -81,7 +93,7 @@ export default function ResultPage() {
         });
 
         if (!response.ok) {
-          let message = "Could not score this resume. Please try again.";
+          let message = "Could not analyze this resume. Please try again.";
           try {
             const data = (await response.json()) as { error?: string };
             if (data.error) message = data.error;
@@ -93,7 +105,7 @@ export default function ResultPage() {
         }
 
         if (!response.body) {
-          if (!cancelled) setError("Empty response from scoring service.");
+          if (!cancelled) setError("Empty response from analysis service.");
           return;
         }
 
@@ -110,27 +122,50 @@ export default function ResultPage() {
           if (
             (partial.state === "successful-parse" ||
               partial.state === "repaired-parse") &&
-            partial.value &&
-            typeof partial.value === "object" &&
-            !Array.isArray(partial.value) &&
-            "atsScore" in partial.value
+            isPartialObject(partial.value) &&
+            "atsScore" in partial.value &&
+            typeof partial.value.atsScore === "number" &&
+            !Number.isNaN(partial.value.atsScore)
           ) {
-            const score = (partial.value as { atsScore?: unknown }).atsScore;
-            if (typeof score === "number" && !cancelled) {
-              setAtsScore(Math.round(score));
+            if (!cancelled) {
+              setAtsScore(Math.round(partial.value.atsScore));
             }
           }
         }
+
+        const finalPartial = await parsePartialJson(accumulated);
+        if (
+          finalPartial.state !== "successful-parse" &&
+          finalPartial.state !== "repaired-parse"
+        ) {
+          if (!cancelled) {
+            setError("Could not parse the analysis response. Please try again.");
+          }
+          return;
+        }
+
+        const validated = ATSResultSchema.safeParse(finalPartial.value);
+        if (!validated.success) {
+          if (!cancelled) {
+            setError("Analysis returned an incomplete result. Please try again.");
+          }
+          return;
+        }
+
+        if (!cancelled) {
+          setAtsScore(validated.data.atsScore);
+          setResult(validated.data);
+        }
       } catch {
         if (!cancelled) {
-          setError("Network error while scoring. Check your connection.");
+          setError("Network error while analyzing. Check your connection.");
         }
       } finally {
         if (!cancelled) setIsStreaming(false);
       }
     }
 
-    void streamScore();
+    void streamAnalysis();
 
     return () => {
       cancelled = true;
@@ -143,91 +178,68 @@ export default function ResultPage() {
 
   if (!ready || !extractedText) {
     return (
-      <div className="mx-auto max-w-2xl py-16 text-center text-slate-600">
+      <div className="mx-auto max-w-3xl px-4 py-16 text-center text-slate-600">
         Loading results…
       </div>
     );
   }
 
-  const tone =
-    atsScore !== null
-      ? scoreTone(atsScore)
-      : { label: "Scoring…", className: "text-slate-500" };
-
   return (
-    <div className="mx-auto max-w-3xl space-y-8">
-      <div className="space-y-3">
-        <p className="text-sm font-semibold uppercase tracking-wide text-action">
-          Resumate
-        </p>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-          Your ATS score
-        </h1>
-        <p className="text-base text-slate-600">
-          AI is analyzing how applicant tracking systems are likely to parse
-          your resume.
-        </p>
-      </div>
+    <div className="mx-auto max-w-3xl space-y-10 px-4 py-16">
+      {error ? (
+        <div className="space-y-4">
+          <ErrorBanner message={error} onDismiss={() => setError(null)} />
+          <Link
+            href="/"
+            onClick={handleBack}
+            className="inline-flex text-sm font-semibold text-action underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action"
+          >
+            Return home
+          </Link>
+        </div>
+      ) : null}
 
-      <section
-        aria-labelledby="score-heading"
-        className="rounded-2xl border border-slate-200/80 bg-white/80 p-6 shadow-sm sm:p-8"
-      >
-        <h2 id="score-heading" className="sr-only">
-          ATS compatibility score
-        </h2>
+      {!error ? (
+        <div className="flex flex-col items-center gap-6">
+          {atsScore !== null ? <ScoreGauge score={atsScore} /> : null}
 
-        {error ? (
-          <p role="alert" className="text-sm text-danger">
-            {error}
-          </p>
-        ) : (
-          <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-end sm:gap-6">
-            <p
-              className="text-6xl font-bold tracking-tight text-slate-900 tabular-nums sm:text-7xl"
+          {isStreaming ? (
+            <div
+              className="flex flex-col items-center gap-3 text-slate-600"
+              role="status"
               aria-live="polite"
             >
-              {atsScore !== null ? atsScore : "—"}
-              <span className="ml-1 text-2xl font-semibold text-slate-400">
-                /100
-              </span>
-            </p>
-            <div className="pb-1">
-              <p className={`text-sm font-semibold ${tone.className}`}>
-                {isStreaming && atsScore === null ? "Scoring in progress…" : tone.label}
-              </p>
-              {isStreaming ? (
-                <p className="mt-1 flex items-center gap-2 text-sm text-slate-500">
-                  <span
-                    className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-action border-t-transparent"
-                    aria-hidden="true"
-                  />
-                  Streaming AI analysis
-                </p>
-              ) : null}
+              <span
+                className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-action border-t-transparent"
+                aria-hidden="true"
+              />
+              <p className="text-sm font-medium">Analyzing your resume…</p>
             </div>
-          </div>
-        )}
-      </section>
+          ) : null}
+        </div>
+      ) : null}
 
-      <section aria-labelledby="preview-heading" className="space-y-3">
-        <h2 id="preview-heading" className="text-lg font-semibold text-slate-900">
-          Extracted text preview
-        </h2>
-        <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-xl border border-slate-200/80 bg-white/90 p-4 text-sm leading-relaxed text-slate-800">
-          {extractedText.length > 1000
-            ? `${extractedText.slice(0, 1000)}…`
-            : extractedText}
-        </pre>
-      </section>
+      {!error && !isStreaming && result && atsScore !== null ? (
+        <div className="space-y-10">
+          <p className="text-center text-base leading-relaxed text-slate-700">
+            {contextualSentence(atsScore)}
+          </p>
+          <CriteriaTable criteria={result.criteria} />
+          <StrengthsList strengths={result.strengths} />
+          <WeaknessesList weaknesses={result.weaknesses} />
+          <SuggestionsList suggestions={result.suggestions} />
+        </div>
+      ) : null}
 
-      <Link
-        href="/"
-        onClick={handleBack}
-        className="inline-flex items-center justify-center rounded-lg bg-action px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-action-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action"
-      >
-        Check another resume
-      </Link>
+      <div className="pt-2">
+        <Link
+          href="/"
+          onClick={handleBack}
+          className="inline-flex items-center justify-center rounded-lg bg-action px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-action-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action"
+        >
+          Check another resume
+        </Link>
+      </div>
     </div>
   );
 }
