@@ -2,20 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { extractResumeAction } from "@/app/actions/extract-resume";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { UploadZone } from "@/components/UploadZone";
-
-type AnalyzeSuccess = {
-  success: true;
-  extractedText: string;
-  charCount: number;
-  wordCount: number;
-};
-
-type AnalyzeFailure = {
-  success: false;
-  error: string;
-};
 
 export default function HomePage() {
   const router = useRouter();
@@ -31,21 +20,12 @@ export default function HomePage() {
 
     try {
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("resume", file);
 
-      const response = await fetch("/api/analyze", {
-        method: "POST",
-        body: formData,
-      });
+      const data = await extractResumeAction(formData);
 
-      const data = (await response.json()) as AnalyzeSuccess | AnalyzeFailure;
-
-      if (!response.ok || !data.success) {
-        const message =
-          !data.success && "error" in data
-            ? data.error
-            : "Could not analyze this resume. Please try again.";
-        setError(message);
+      if (!data.success) {
+        setError(data.error);
         return;
       }
 
@@ -69,14 +49,14 @@ export default function HomePage() {
     <div className="mx-auto max-w-2xl">
       <div className="mb-8 space-y-3">
         <p className="text-sm font-semibold uppercase tracking-wide text-action">
-          ResumeBuddy
+          Resumate
         </p>
         <h1 className="text-balance text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
           Check your resume&apos;s ATS score
         </h1>
         <p className="text-base leading-relaxed text-slate-600 sm:text-lg">
           Upload a PDF or DOCX resume. We extract the text an applicant tracking
-          system would see, so you can spot gaps before you apply.
+          system would see, then score how ATS-friendly it is.
         </p>
       </div>
 

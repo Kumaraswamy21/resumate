@@ -9,7 +9,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "ATS Checker | ResumeBuddy",
+  title: "Resumate",
   description:
     "Upload your resume and check how ATS-friendly it is before you apply.",
 };
@@ -32,13 +32,13 @@ export default function RootLayout({
               className="flex h-9 w-9 items-center justify-center rounded-lg bg-action text-sm font-bold text-white"
               aria-hidden="true"
             >
-              RB
+              R
             </div>
             <div>
               <p className="text-lg font-semibold tracking-tight text-slate-900">
-                ATS Checker
+                Resumate
               </p>
-              <p className="text-xs text-slate-500">by ResumeBuddy</p>
+              <p className="text-xs text-slate-500">ATS resume scoring</p>
             </div>
           </div>
         </header>
@@ -49,7 +49,7 @@ export default function RootLayout({
 
         <footer className="border-t border-slate-200/80 bg-white/50">
           <div className="mx-auto flex w-full max-w-5xl flex-col gap-1 px-4 py-6 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-            <p>ResumeBuddy · ATS Checker</p>
+            <p>Resumate</p>
             <p>Your file is processed in memory and never stored.</p>
           </div>
         </footer>
