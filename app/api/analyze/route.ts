@@ -1,5 +1,6 @@
 import { streamObject } from "ai";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import { getModel } from "@/lib/ai/provider";
 import { ATSResultSchema, SYSTEM_PROMPT } from "@/lib/ai/prompt";
 import { extractText } from "@/lib/parser";
