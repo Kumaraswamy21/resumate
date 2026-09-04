@@ -36,12 +36,12 @@ function readExtractedText(): string | null {
 
 function contextualSentence(score: number): string {
   if (score >= 75) {
-    return "Your resume is well optimized for ATS screening. A few refinements could push it even higher.";
+    return "Your resume is well optimised for ATS systems.";
   }
   if (score >= 50) {
-    return "Your resume is partially ATS-ready, but key gaps remain. Address the suggestions below to improve your odds.";
+    return "Your resume passes basic ATS filters but has room to improve.";
   }
-  return "Your resume needs significant improvements before it will pass most ATS filters. Start with the high-priority suggestions.";
+  return "Your resume needs significant improvements to pass most ATS filters.";
 }
 
 function isPartialObject(
