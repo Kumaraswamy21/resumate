@@ -2,7 +2,11 @@ import { streamObject } from "ai";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getModel } from "@/lib/ai/provider";
-import { ATSResultSchema, SYSTEM_PROMPT } from "@/lib/ai/prompt";
+import {
+  ATSResultSchema,
+  CURRENT_DATE_PLACEHOLDER,
+  SYSTEM_PROMPT,
+} from "@/lib/ai/prompt";
 import { extractText } from "@/lib/parser";
 import {
   UploadSchema,
@@ -12,11 +16,22 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
+function currentDateYYYYMM(): string {
+  return new Date().toISOString().slice(0, 7);
+}
+
+function systemPromptWithCurrentDate(): string {
+  return SYSTEM_PROMPT.replaceAll(
+    CURRENT_DATE_PLACEHOLDER,
+    currentDateYYYYMM(),
+  );
+}
+
 function streamScore(prompt: string): Response {
   const result = streamObject({
     model: getModel(),
     schema: ATSResultSchema,
-    system: SYSTEM_PROMPT,
+    system: systemPromptWithCurrentDate(),
     prompt,
   });
   return result.toTextStreamResponse();
