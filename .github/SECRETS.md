@@ -8,9 +8,12 @@
 # Vercel deployment (deploy workflow only)
 # ----------------------------------------
 # VERCEL_TOKEN                  — https://vercel.com/account/tokens
-# VERCEL_ORG_ID                 — Team or user id from Vercel project settings
-# VERCEL_PROJECT_ID             — Project id from Vercel project settings
+# VERCEL_ORG_ID                 — Project Settings → General → .vercel/project.json → orgId
+# VERCEL_PROJECT_ID             — Project Settings → General → .vercel/project.json → projectId
 #
-# The deploy workflow syncs app secrets to Vercel production before each deploy.
+# Find orgId / projectId: locally run `npx vercel link`, then copy values from `.vercel/project.json`.
+# The token must belong to an account that can access that Vercel project.
+#
+# The deploy workflow links the project, syncs app secrets to Vercel production, then deploys.
 #
 # Add secrets: GitHub repo → Settings → Secrets and variables → Actions → New repository secret

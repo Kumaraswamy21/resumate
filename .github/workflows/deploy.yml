@@ -10,14 +10,17 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+  VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+  VERCEL_TELEMETRY_DISABLED: "1"
   GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
-  AI_MODEL: ${{ secrets.AI_MODEL || 'gemini-2.0-flash' }}
+  AI_MODEL: ${{ secrets.AI_MODEL }}
 
 jobs:
   deploy:
     name: Deploy to Vercel (production)
     runs-on: ubuntu-latest
-    environment: production
 
     steps:
       - name: Checkout
@@ -29,39 +32,43 @@ jobs:
           node-version: 20
           cache: npm
 
+      - name: Require Vercel secrets
+        run: |
+          missing=0
+          for name in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID GOOGLE_GENERATIVE_AI_API_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "Missing GitHub secret: $name"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "Add the secrets listed above at Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          if [ -z "$AI_MODEL" ]; then
+            echo "AI_MODEL=gemini-2.0-flash" >> "$GITHUB_ENV"
+          fi
+
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
 
+      - name: Link Vercel project
+        run: |
+          mkdir -p .vercel
+          printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
+
       - name: Pull Vercel project settings
-        run: vercel pull --yes --environment=production
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
 
       - name: Sync GitHub secrets to Vercel (production)
         run: |
-          printf '%s' "$GOOGLE_GENERATIVE_AI_API_KEY" | vercel env add GOOGLE_GENERATIVE_AI_API_KEY production --force --token "$VERCEL_TOKEN"
-          printf '%s' "$AI_MODEL" | vercel env add AI_MODEL production --force --token "$VERCEL_TOKEN"
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          vercel env rm GOOGLE_GENERATIVE_AI_API_KEY production --yes --token="$VERCEL_TOKEN" || true
+          vercel env rm AI_MODEL production --yes --token="$VERCEL_TOKEN" || true
+          printf '%s' "$GOOGLE_GENERATIVE_AI_API_KEY" | vercel env add GOOGLE_GENERATIVE_AI_API_KEY production --token="$VERCEL_TOKEN"
+          printf '%s' "$AI_MODEL" | vercel env add AI_MODEL production --token="$VERCEL_TOKEN"
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build
-        run: npm run build
+      - name: Build on Vercel
+        run: vercel build --prod --token="$VERCEL_TOKEN"
 
       - name: Deploy to Vercel
-        uses: amondnet/vercel-action@v25
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          vercel-args: --prod
-          working-directory: ./
-        env:
-          GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
-          AI_MODEL: ${{ secrets.AI_MODEL || 'gemini-2.0-flash' }}
+        run: vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
