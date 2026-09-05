@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.63",
+    "@napi-rs/canvas": "^1.0.8",
     "ai": "^7.0.92",
     "mammoth": "^1.12.2",
     "next": "14.2.35",
