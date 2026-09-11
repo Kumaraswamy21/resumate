@@ -1,14 +1,18 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { extractResumeAction } from "@/app/actions/extract-resume";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { UploadZone } from "@/components/UploadZone";
 
+const MAX_JOB_DESCRIPTION_CHARS = 8000;
+
 export default function HomePage() {
   const router = useRouter();
+  const jobDescriptionId = useId();
   const [file, setFile] = useState<File | null>(null);
+  const [jobDescription, setJobDescription] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,12 +33,17 @@ export default function HomePage() {
         return;
       }
 
+      const trimmedJobDescription = jobDescription.trim().slice(0, MAX_JOB_DESCRIPTION_CHARS);
+
       sessionStorage.setItem(
         "ats_result",
         JSON.stringify({
           extractedText: data.extractedText,
           charCount: data.charCount,
           wordCount: data.wordCount,
+          ...(trimmedJobDescription
+            ? { jobDescription: trimmedJobDescription }
+            : {}),
         }),
       );
       router.push("/result");
@@ -70,6 +79,33 @@ export default function HomePage() {
           onFileSelect={setFile}
           disabled={isUploading}
         />
+
+        <div className="space-y-2">
+          <label
+            htmlFor={jobDescriptionId}
+            className="block text-sm font-medium text-slate-900"
+          >
+            Job description{" "}
+            <span className="font-normal text-slate-500">(optional)</span>
+          </label>
+          <textarea
+            id={jobDescriptionId}
+            value={jobDescription}
+            onChange={(e) =>
+              setJobDescription(e.target.value.slice(0, MAX_JOB_DESCRIPTION_CHARS))
+            }
+            disabled={isUploading}
+            rows={5}
+            placeholder="Paste a job description for a more targeted score."
+            className="w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action disabled:cursor-not-allowed disabled:opacity-60"
+          />
+          <div className="flex items-center justify-between gap-3 text-xs text-slate-500">
+            <p>Optional — improves keyword relevance against a specific role.</p>
+            <span className="shrink-0 tabular-nums">
+              {jobDescription.length}/{MAX_JOB_DESCRIPTION_CHARS}
+            </span>
+          </div>
+        </div>
 
         <button
           type="button"

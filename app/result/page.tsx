@@ -11,6 +11,12 @@ type StoredAtsResult = {
   extractedText: string;
   charCount?: number;
   wordCount?: number;
+  jobDescription?: string;
+};
+
+type StoredSessionPayload = {
+  extractedText: string;
+  jobDescription?: string;
 };
 
 const GAUGE_CIRCUMFERENCE = 502.65;
@@ -65,17 +71,25 @@ function getScoreBand(score: number): ScoreBand {
   };
 }
 
-function readExtractedText(): string | null {
+function readStoredSession(): StoredSessionPayload | null {
   try {
     const raw = sessionStorage.getItem("ats_result");
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return null;
-    const extractedText = (parsed as StoredAtsResult).extractedText;
-    if (typeof extractedText !== "string" || extractedText.length === 0) {
+    const stored = parsed as StoredAtsResult;
+    if (typeof stored.extractedText !== "string" || stored.extractedText.length === 0) {
       return null;
     }
-    return extractedText;
+    const jobDescription =
+      typeof stored.jobDescription === "string" &&
+      stored.jobDescription.trim().length > 0
+        ? stored.jobDescription.trim()
+        : undefined;
+    return {
+      extractedText: stored.extractedText,
+      jobDescription,
+    };
   } catch {
     return null;
   }
@@ -349,6 +363,7 @@ function SuggestionsPanel({
 export default function ResultPage() {
   const router = useRouter();
   const [extractedText, setExtractedText] = useState<string | null>(null);
+  const [jobDescription, setJobDescription] = useState<string | undefined>();
   const [atsScore, setAtsScore] = useState<number | null>(null);
   const [result, setResult] = useState<ATSResult | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -357,13 +372,14 @@ export default function ResultPage() {
   const startedRef = useRef(false);
 
   useEffect(() => {
-    const text = readExtractedText();
-    if (!text) {
+    const stored = readStoredSession();
+    if (!stored) {
       sessionStorage.removeItem("ats_result");
       router.replace("/");
       return;
     }
-    setExtractedText(text);
+    setExtractedText(stored.extractedText);
+    setJobDescription(stored.jobDescription);
     setReady(true);
   }, [router]);
 
@@ -382,6 +398,9 @@ export default function ResultPage() {
       try {
         const formData = new FormData();
         formData.append("extractedText", extractedText!);
+        if (jobDescription) {
+          formData.append("jobDescription", jobDescription);
+        }
 
         const response = await fetch("/api/analyze", {
           method: "POST",
@@ -466,7 +485,7 @@ export default function ResultPage() {
     return () => {
       cancelled = true;
     };
-  }, [ready, extractedText]);
+  }, [ready, extractedText, jobDescription]);
 
   function handleBack() {
     sessionStorage.removeItem("ats_result");
@@ -517,9 +536,16 @@ export default function ResultPage() {
 
           {!isStreaming && result && atsScore !== null ? (
             <div className="mt-10 space-y-10">
-              <p className="text-left text-base leading-relaxed text-slate-700">
-                {contextualSentence(atsScore)}
-              </p>
+              <div className="space-y-2 text-left">
+                <p className="text-base leading-relaxed text-slate-700">
+                  {contextualSentence(atsScore)}
+                </p>
+                {jobDescription ? (
+                  <p className="text-sm text-slate-500">
+                    Scored against the provided job description.
+                  </p>
+                ) : null}
+              </div>
               <CriteriaBreakdown criteria={result.criteria} />
               <StrengthsWeaknessesGrid
                 strengths={result.strengths}

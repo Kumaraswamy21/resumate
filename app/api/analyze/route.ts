@@ -16,6 +16,8 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
+const MAX_JOB_DESCRIPTION_CHARS = 8000;
+
 function currentDateYYYYMM(): string {
   return new Date().toISOString().slice(0, 7);
 }
@@ -25,6 +27,43 @@ function systemPromptWithCurrentDate(): string {
     CURRENT_DATE_PLACEHOLDER,
     currentDateYYYYMM(),
   );
+}
+
+function parseJobDescription(
+  value: FormDataEntryValue | null,
+): { ok: true; value?: string } | { ok: false; error: string } {
+  if (value === null || value === undefined) {
+    return { ok: true };
+  }
+  if (typeof value !== "string") {
+    return { ok: false, error: "Job description must be text." };
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return { ok: true };
+  }
+  if (trimmed.length > MAX_JOB_DESCRIPTION_CHARS) {
+    return {
+      ok: false,
+      error: `Job description must be at most ${MAX_JOB_DESCRIPTION_CHARS} characters.`,
+    };
+  }
+  return { ok: true, value: trimmed };
+}
+
+function buildUserPrompt(resumeText: string, jobDescription?: string): string {
+  if (!jobDescription) return resumeText;
+  return [
+    "A job description is provided below. When scoring keyword density and relevance,",
+    "and when writing strengths, weaknesses, and suggestions, prefer alignment with this role.",
+    "Still evaluate all ATS structure criteria on the resume itself.",
+    "",
+    "JOB DESCRIPTION:",
+    jobDescription,
+    "",
+    "RESUME TEXT:",
+    resumeText,
+  ].join("\n");
 }
 
 function streamScore(prompt: string): Response {
@@ -48,12 +87,25 @@ export async function POST(req: NextRequest): Promise<Response> {
     );
   }
 
+  const jobDescriptionResult = parseJobDescription(
+    formData.get("jobDescription"),
+  );
+  if (!jobDescriptionResult.ok) {
+    return NextResponse.json(
+      { success: false, error: jobDescriptionResult.error },
+      { status: 400 },
+    );
+  }
+  const jobDescription = jobDescriptionResult.value;
+
   // Alternate path for the result page: score already-extracted text.
   // Primary path below follows the file → extract → streamObject flow.
   const extractedTextField = formData.get("extractedText");
   if (typeof extractedTextField === "string" && extractedTextField.trim().length > 0) {
     try {
-      return streamScore(extractedTextField);
+      return streamScore(
+        buildUserPrompt(extractedTextField, jobDescription),
+      );
     } catch (err) {
       console.error("Analyze stream error:", err);
       return NextResponse.json(
@@ -105,7 +157,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   }
 
   try {
-    return streamScore(extractedText);
+    return streamScore(buildUserPrompt(extractedText, jobDescription));
   } catch (err) {
     console.error("Analyze stream error:", err);
     return NextResponse.json(
