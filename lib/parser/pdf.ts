@@ -1,11 +1,11 @@
 import { PDFParse } from "pdf-parse";
-import type { TableResult } from "pdf-parse";
 import { CanvasFactory } from "pdf-parse/worker";
-import { recognizeImageText } from "./ocr";
+import { recognizeImageTexts } from "./ocr";
 
 const MIN_TEXT_LENGTH = 40;
-/** Ignore tiny decorative/tracking images when selecting OCR sources. */
-const MIN_OCR_IMAGE_EDGE = 400;
+/** A page this small is usually a header, page number, or failed extraction. */
+const MIN_USABLE_PAGE_CHARS = 40;
+const MIN_USABLE_PAGE_WORDS = 5;
 
 function normalizeExtractedText(text: string): string {
   return text
@@ -36,13 +36,63 @@ function tableArrayToText(tables: Array<Array<Array<string>>>): string {
   return blocks.join("\n\n");
 }
 
-function tablesToText(result: TableResult): string {
-  const pageTables = result.pages.flatMap((page) => page.tables);
-  const fromPages = tableArrayToText(pageTables);
-  const fromMerged = tableArrayToText(result.mergedTables ?? []);
-  return normalizeExtractedText(
-    [fromPages, fromMerged].filter(Boolean).join("\n\n"),
+function tableRows(table: Array<Array<string>>): string[] {
+  return table
+    .map((row) =>
+      row
+        .map((cell) => cell.replace(/\s+/g, " ").trim())
+        .filter(Boolean)
+        .join(" | "),
+    )
+    .filter(Boolean);
+}
+
+function normalizedTableRow(row: string): string {
+  return row.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+/**
+ * Page tables are authoritative for page placement. Merged tables are only
+ * used for rows not already present on a page, and each such row is assigned
+ * once to the page with the greatest native-text overlap.
+ */
+function addUnplacedMergedRows(
+  pageTableText: Map<number, string>,
+  pagePlainText: Map<number, string>,
+  mergedTables: Array<Array<Array<string>>>,
+): void {
+  const existingRows = new Set(
+    [...pageTableText.values()]
+      .flatMap((text) => text.split("\n"))
+      .map(normalizedTableRow),
   );
+
+  for (const table of mergedTables) {
+    for (const row of tableRows(table)) {
+      const normalizedRow = normalizedTableRow(row);
+      if (!normalizedRow || existingRows.has(normalizedRow)) continue;
+
+      const rowWords = normalizedRow.split(/\W+/).filter((word) => word.length > 2);
+      let bestPage: number | undefined;
+      let bestScore = 0;
+      for (const [pageNumber, text] of pagePlainText) {
+        const words = new Set(normalizedTableRow(text).split(/\W+/));
+        const score = rowWords.reduce((total, word) => total + (words.has(word) ? 1 : 0), 0);
+        if (score > bestScore) {
+          bestPage = pageNumber;
+          bestScore = score;
+        }
+      }
+
+      if (bestPage === undefined) {
+        bestPage = pagePlainText.keys().next().value as number | undefined;
+      }
+      if (bestPage === undefined) continue;
+      const current = pageTableText.get(bestPage) ?? "";
+      pageTableText.set(bestPage, normalizeExtractedText(`${current}\n${row}`));
+      existingRows.add(normalizedRow);
+    }
+  }
 }
 
 /** Prefer the richer extraction; use tables when plain text is sparse (common with table layouts). */
@@ -57,45 +107,41 @@ function pickBestText(plain: string, tableText: string): string {
   return tableText.length > plain.length * 1.25 ? tableText : plain;
 }
 
-async function collectOcrImages(parser: PDFParse): Promise<Uint8Array[]> {
-  const images: Uint8Array[] = [];
+async function extractViaOcr(
+  parser: PDFParse,
+  pageNumbers: number[],
+): Promise<Map<number, string>> {
+  if (pageNumbers.length === 0) return new Map();
 
-  try {
-    const imageResult = await parser.getImage({ imageThreshold: MIN_OCR_IMAGE_EDGE });
-    for (const page of imageResult.pages) {
-      for (const image of page.images) {
-        if (
-          image.data?.length &&
-          (image.width >= MIN_OCR_IMAGE_EDGE || image.height >= MIN_OCR_IMAGE_EDGE)
-        ) {
-          images.push(image.data);
-        }
-      }
-    }
-  } catch {
-    // Embedded-image extraction is optional.
-  }
-
-  if (images.length > 0) return images;
-
-  // Image-only / scanned PDFs: render pages and OCR the screenshots.
   const screenshot = await parser.getScreenshot({
+    partial: pageNumbers,
     scale: 2,
     imageBuffer: true,
     imageDataUrl: false,
   });
 
-  for (const page of screenshot.pages) {
-    if (page.data?.length) images.push(page.data);
-  }
-
-  return images;
+  const renderablePages = screenshot.pages.filter((page) => page.data?.length);
+  const recognized = await recognizeImageTexts(renderablePages.map((page) => page.data));
+  return new Map(
+    renderablePages.map((page, index) => [
+      page.pageNumber,
+      normalizeExtractedText(recognized[index] ?? ""),
+    ]),
+  );
 }
 
-async function extractViaOcr(parser: PDFParse): Promise<string> {
-  const images = await collectOcrImages(parser);
-  if (images.length === 0) return "";
-  return normalizeExtractedText(await recognizeImageText(images));
+function isUsableNativeText(text: string): boolean {
+  const chars = (text.match(/[A-Za-z0-9]/g) ?? []).length;
+  const words = text.match(/[A-Za-z0-9]+/g) ?? [];
+  return chars >= MIN_USABLE_PAGE_CHARS && words.length >= MIN_USABLE_PAGE_WORDS;
+}
+
+function betterText(nativeText: string, ocrText: string): string {
+  if (!ocrText) return nativeText;
+  if (!nativeText) return ocrText;
+  const nativeScore = (nativeText.match(/[A-Za-z0-9]/g) ?? []).length;
+  const ocrScore = (ocrText.match(/[A-Za-z0-9]/g) ?? []).length;
+  return ocrScore > nativeScore ? ocrText : nativeText;
 }
 
 export async function parsePdf(buffer: Buffer): Promise<string> {
@@ -117,32 +163,58 @@ export async function parsePdf(buffer: Buffer): Promise<string> {
       itemJoiner: " ",
     });
 
-    const plain = normalizeExtractedText(textResult.text);
+    const pagePlainText = new Map<number, string>();
+    for (const page of textResult.pages) {
+      pagePlainText.set(page.num, normalizeExtractedText(page.text));
+    }
 
-    let tableText = "";
+    const pageTableText = new Map<number, string>();
     try {
       const tableResult = await parser.getTable();
-      tableText = tablesToText(tableResult);
+      for (const page of tableResult.pages) {
+        const text = tableArrayToText(page.tables);
+        if (text) pageTableText.set(page.num, normalizeExtractedText(text));
+      }
+      addUnplacedMergedRows(pageTableText, pagePlainText, tableResult.mergedTables ?? []);
     } catch {
       // Table detection is best-effort for bordered grids.
     }
 
-    let text = pickBestText(plain, tableText);
-
-    if (text.length < MIN_TEXT_LENGTH) {
-      const ocrText = await extractViaOcr(parser);
-      if (ocrText.length >= MIN_TEXT_LENGTH) {
-        text = ocrText;
-      }
+    const pageText = new Map<number, string>();
+    const pages = Array.from({ length: textResult.total }, (_, index) => index + 1);
+    for (const pageNumber of pages) {
+      const plain = pagePlainText.get(pageNumber) ?? "";
+      const tableText = pageTableText.get(pageNumber) ?? "";
+      pageText.set(pageNumber, pickBestText(plain, tableText));
     }
 
-    if (text.length < MIN_TEXT_LENGTH) {
+    // OCR is decided per page: short/sparse extraction is not evidence that
+    // the whole PDF is text-based. This also prevents a selectable header or
+    // page number from masking a scanned body below it.
+    const ocrCandidates = pages.filter((pageNumber) =>
+      !isUsableNativeText(pageText.get(pageNumber) ?? ""),
+    );
+    try {
+      const ocrByPage = await extractViaOcr(parser, ocrCandidates);
+      for (const pageNumber of ocrCandidates) {
+        const nativeText = pageText.get(pageNumber) ?? "";
+        pageText.set(pageNumber, betterText(nativeText, ocrByPage.get(pageNumber) ?? ""));
+      }
+    } catch {
+      // Keep native text when rendering or OCR is unavailable.
+    }
+
+    const text = pages
+      .map((pageNumber) => pageText.get(pageNumber) ?? "")
+      .join("\n\n");
+
+    if (normalizeExtractedText(text).length < MIN_TEXT_LENGTH) {
       throw new Error(
         "Could not extract enough text from this PDF, even with OCR. Try a clearer scan or a text-based resume.",
       );
     }
 
-    return text;
+    return normalizeExtractedText(text);
   } finally {
     await parser.destroy();
   }

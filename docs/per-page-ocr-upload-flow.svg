@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
+  <title id="title">Sanitized Resumate upload flow</title>
+  <desc id="desc">Three panels showing upload, per-page OCR selection, and ordered results. No personal data is shown.</desc>
+  <style>
+    .panel { fill: #fff; stroke: #d7dce5; stroke-width: 2; }
+    .bar { fill: #172033; }
+    .label { fill: #172033; font: 700 18px -apple-system, BlinkMacSystemFont, sans-serif; }
+    .text { fill: #465166; font: 15px -apple-system, BlinkMacSystemFont, sans-serif; }
+    .small { fill: #69758a; font: 13px -apple-system, BlinkMacSystemFont, sans-serif; }
+    .accent { fill: #635bff; }
+    .line { stroke: #b9c2d1; stroke-width: 2; }
+  </style>
+  <rect width="1200" height="360" fill="#f5f7fb"/>
+  <g transform="translate(30 35)">
+    <rect class="panel" width="340" height="280" rx="14"/>
+    <rect class="bar" width="340" height="48" rx="14"/>
+    <rect class="bar" y="32" width="340" height="16"/>
+    <text x="20" y="31" fill="#fff" class="label">1 · Upload</text>
+    <text x="24" y="88" class="label">Check your resume's ATS score</text>
+    <rect x="24" y="112" width="292" height="64" rx="8" fill="#f0efff" stroke="#c9c5ff"/>
+    <text x="42" y="142" class="text">sanitized-mixed-ocr.pdf</text>
+    <text x="42" y="162" class="small">PDF · 3 pages · no personal data</text>
+    <rect x="24" y="204" width="132" height="38" rx="7" class="accent"/>
+    <text x="49" y="229" fill="#fff" class="text">Analyze</text>
+  </g>
+  <path d="M390 175h55" class="line"/><path d="m435 168 12 7-12 7" fill="none" class="line"/>
+  <g transform="translate(455 35)">
+    <rect class="panel" width="340" height="280" rx="14"/>
+    <rect class="bar" width="340" height="48" rx="14"/>
+    <rect class="bar" y="32" width="340" height="16"/>
+    <text x="20" y="31" fill="#fff" class="label">2 · Selective OCR</text>
+    <text x="24" y="88" class="label">Native extraction by page</text>
+    <text x="30" y="125" class="text">Page 1 · 642 chars · native</text>
+    <text x="30" y="165" class="text">Page 2 · 8 chars · OCR</text>
+    <text x="30" y="205" class="text">Page 3 · 235 chars · native</text>
+    <rect x="22" y="143" width="296" height="36" rx="7" fill="#fff4d6" stroke="#e9c66b"/>
+    <text x="40" y="166" class="text">only sparse page is rendered</text>
+    <text x="24" y="250" class="small">one offline Tesseract worker</text>
+  </g>
+  <path d="M815 175h55" class="line"/><path d="m860 168 12 7-12 7" fill="none" class="line"/>
+  <g transform="translate(880 35)">
+    <rect class="panel" width="290" height="280" rx="14"/>
+    <rect class="bar" width="290" height="48" rx="14"/>
+    <rect class="bar" y="32" width="290" height="16"/>
+    <text x="20" y="31" fill="#fff" class="label">3 · Result</text>
+    <text x="24" y="88" class="label">Ordered text</text>
+    <text x="30" y="128" class="text">Page 1 native</text>
+    <text x="30" y="168" class="text">Page 2 OCR body</text>
+    <text x="30" y="208" class="text">Page 3 native</text>
+    <text x="24" y="252" class="small">header appears once</text>
+  </g>
+</svg>

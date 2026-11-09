@@ -29,6 +29,13 @@ Open [http://localhost:3000](http://localhost:3000).
 - Zod
 - Vercel AI SDK (`ai`, `@ai-sdk/google`)
 
+## Per-page OCR fallback
+
+PDF extraction is page-aware: sparse pages are rendered and OCR’d individually,
+while usable native text is retained on other pages. See the public case study
+in [`docs/per-page-ocr.md`](docs/per-page-ocr.md) and the sanitized fixture
+sources in [`fixtures/per-page-ocr/`](fixtures/per-page-ocr/).
+
 ## Scripts
 
 - `npm run dev` — development server

@@ -27,6 +27,19 @@ export async function recognizeImageText(
 ): Promise<string> {
   if (images.length === 0) return "";
 
+  return (await recognizeImageTexts(images)).filter(Boolean).join("\n\n").trim();
+}
+
+/**
+ * OCR each image independently while sharing one offline Tesseract worker.
+ * A failed page is represented by an empty string so callers can retain its
+ * native extraction without losing OCR from the other pages.
+ */
+export async function recognizeImageTexts(
+  images: Array<Buffer | Uint8Array>,
+): Promise<string[]> {
+  if (images.length === 0) return [];
+
   const { workerPath, corePath, langPath } = resolveTesseractPaths();
 
   const worker = await createWorker("eng", 1, {
@@ -43,15 +56,18 @@ export async function recognizeImageText(
     const parts: string[] = [];
 
     for (const image of images) {
-      const input = Buffer.isBuffer(image) ? image : Buffer.from(image);
-      const {
-        data: { text },
-      } = await worker.recognize(input);
-      const trimmed = text.replace(/\u0000/g, "").trim();
-      if (trimmed) parts.push(trimmed);
+      try {
+        const input = Buffer.isBuffer(image) ? image : Buffer.from(image);
+        const {
+          data: { text },
+        } = await worker.recognize(input);
+        parts.push(text.replace(/\u0000/g, "").trim());
+      } catch {
+        parts.push("");
+      }
     }
 
-    return parts.join("\n\n").trim();
+    return parts;
   } finally {
     await worker.terminate();
   }

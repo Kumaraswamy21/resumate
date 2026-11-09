@@ -1,0 +1,8 @@
+SELECTED PROJECT
+
+Signal Archive
+
+Designed a restartable import process for historical records.
+Added validation checks and a daily reconciliation report.
+Improved failure recovery by documenting clear operator steps.
+Reviewed the final data set with project stakeholders before release.

@@ -1,0 +1,8 @@
+PROFILE
+Sample candidate builds reliable data workflows and maintains clear technical documentation.
+
+SKILLS
+Python, SQL, batch processing, testing, monitoring, and data quality.
+
+EXPERIENCE
+Built maintainable ingestion jobs, added validation checks, and documented recovery steps for operators.
